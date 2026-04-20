@@ -45,6 +45,12 @@ public class LdapProperties {
      */
     private String userSearchBase = "";
 
+    /**
+     * Windows Active Directory domain name (e.g., CORP).
+     * When set, authentication binds as DOMAIN\username instead of full DN.
+     */
+    private String domain = "";
+
     public boolean isEnabled() {
         return enabled;
     }
@@ -99,5 +105,13 @@ public class LdapProperties {
 
     public void setUserSearchBase(String userSearchBase) {
         this.userSearchBase = userSearchBase;
+    }
+
+    public String getDomain() {
+        return domain;
+    }
+
+    public void setDomain(String domain) {
+        this.domain = domain;
     }
 }

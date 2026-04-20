@@ -10,7 +10,6 @@ import com.iflytek.skillhub.domain.user.UserAccount;
 import com.iflytek.skillhub.domain.user.UserAccountRepository;
 import com.iflytek.skillhub.domain.user.UserStatus;
 import java.util.Hashtable;
-import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -74,6 +73,10 @@ public class LdapAuthService {
             throw new AuthFlowException(HttpStatus.SERVICE_UNAVAILABLE, "error.auth.ldap.disabled");
         }
 
+        if (username == null || username.isBlank() || password == null || password.isBlank()) {
+            throw new AuthFlowException(HttpStatus.UNAUTHORIZED, "error.auth.ldap.invalidCredentials");
+        }
+
         log.debug("LDAP URL: {}, Base: {}, SearchBase: {}, SearchAttr: {}", 
             ldapProperties.getUrl(), 
             ldapProperties.getBase(),
@@ -91,7 +94,7 @@ public class LdapAuthService {
 
         // Authenticate against LDAP
         log.debug("Attempting LDAP bind for user DN: {}", userDn);
-        boolean authenticated = authenticateLdap(userDn, password);
+        boolean authenticated = authenticateLdap(username, userDn, password);
         log.debug("LDAP bind result for {}: {}", username, authenticated);
         
         if (!authenticated) {
@@ -141,7 +144,7 @@ public class LdapAuthService {
         DirContext ctx = null;
         try {
             ctx = createLdapContext();
-            String searchFilter = "(" + ldapProperties.getUserSearchAttribute() + "={0})";
+            String searchFilter = "(&(" + ldapProperties.getUserSearchAttribute() + "={0})(objectClass=person))";
             String searchBase = ldapProperties.getUserSearchBase().isEmpty()
                 ? ldapProperties.getBase()
                 : ldapProperties.getUserSearchBase() + "," + ldapProperties.getBase();
@@ -158,6 +161,7 @@ public class LdapAuthService {
             }
             return null;
         } catch (Exception e) {
+            log.warn("LDAP user search failed for {}: {}", username, e.getMessage());
             return null;
         } finally {
             closeContext(ctx);
@@ -196,21 +200,29 @@ public class LdapAuthService {
 
     /**
      * Authenticates a user against the LDAP server using their DN and password.
+     * When a Windows AD domain is configured, binds as DOMAIN\username instead of full DN.
      */
-    private boolean authenticateLdap(String userDn, String password) {
+    private boolean authenticateLdap(String username, String userDn, String password) {
+        DirContext ctx = null;
         try {
             Hashtable<String, String> env = new Hashtable<>();
             env.put(Context.INITIAL_CONTEXT_FACTORY, "com.sun.jndi.ldap.LdapCtxFactory");
             env.put(Context.PROVIDER_URL, ldapProperties.getUrl());
             env.put(Context.SECURITY_AUTHENTICATION, "simple");
-            env.put(Context.SECURITY_PRINCIPAL, userDn);
+
+            String domain = ldapProperties.getDomain();
+            String principal = (domain != null && !domain.isBlank())
+                ? domain + "\\" + username
+                : userDn;
+            env.put(Context.SECURITY_PRINCIPAL, principal);
             env.put(Context.SECURITY_CREDENTIALS, password);
 
-            DirContext ctx = new InitialDirContext(env);
-            ctx.close();
+            ctx = new InitialDirContext(env);
             return true;
         } catch (NamingException e) {
             return false;
+        } finally {
+            closeContext(ctx);
         }
     }
 
@@ -218,6 +230,7 @@ public class LdapAuthService {
      * Retrieves user attributes from LDAP.
      */
     private Attributes getUserAttributes(String userDn) {
+        DirContext ctx = null;
         try {
             Hashtable<String, String> env = new Hashtable<>();
             env.put(Context.INITIAL_CONTEXT_FACTORY, "com.sun.jndi.ldap.LdapCtxFactory");
@@ -230,12 +243,13 @@ public class LdapAuthService {
                 env.put(Context.SECURITY_CREDENTIALS, ldapProperties.getPassword());
             }
             
-            DirContext ctx = new InitialDirContext(env);
-            Attributes attrs = ctx.getAttributes(new LdapName(userDn));
-            ctx.close();
-            return attrs;
+            ctx = new InitialDirContext(env);
+            return ctx.getAttributes(new LdapName(userDn));
         } catch (Exception e) {
+            log.warn("Failed to fetch LDAP attributes for DN {}: {}", userDn, e.getMessage());
             return null;
+        } finally {
+            closeContext(ctx);
         }
     }
 
@@ -259,6 +273,8 @@ public class LdapAuthService {
         // Try to find by email first
         if (email != null && !email.isEmpty()) {
             user = userAccountRepository.findByEmailIgnoreCase(email.toLowerCase()).orElse(null);
+        } else {
+            log.warn("LDAP user '{}' has no mail attribute and cannot be matched to an existing account; a new account will be created", username);
         }
 
         // If not found, create a new user
