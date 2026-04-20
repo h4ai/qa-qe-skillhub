@@ -99,4 +99,15 @@ class LdapAuthServiceTest {
             .extracting(e -> ((AuthFlowException) e).getStatus())
             .isEqualTo(HttpStatus.UNAUTHORIZED);
     }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"", "  "})
+    void login_whenPasswordBlankOrEmpty_throwsUnauthorized(String password) {
+        given(ldapProperties.isEnabled()).willReturn(true);
+
+        assertThatThrownBy(() -> service.login("alice", password))
+            .isInstanceOf(AuthFlowException.class)
+            .extracting(e -> ((AuthFlowException) e).getStatus())
+            .isEqualTo(HttpStatus.UNAUTHORIZED);
+    }
 }

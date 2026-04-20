@@ -73,7 +73,7 @@ public class LdapAuthService {
             throw new AuthFlowException(HttpStatus.SERVICE_UNAVAILABLE, "error.auth.ldap.disabled");
         }
 
-        if (username == null || username.isBlank() || password == null || password.isEmpty()) {
+        if (username == null || username.isBlank() || password == null || password.isBlank()) {
             throw new AuthFlowException(HttpStatus.UNAUTHORIZED, "error.auth.ldap.invalidCredentials");
         }
 
@@ -274,7 +274,7 @@ public class LdapAuthService {
         if (email != null && !email.isEmpty()) {
             user = userAccountRepository.findByEmailIgnoreCase(email.toLowerCase()).orElse(null);
         } else {
-            log.warn("LDAP user '{}' has no mail attribute; a new account will be created on each login if no match is found", username);
+            log.warn("LDAP user '{}' has no mail attribute and cannot be matched to an existing account; a new account will be created", username);
         }
 
         // If not found, create a new user
