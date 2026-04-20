@@ -93,6 +93,7 @@ skillhub:
     password: ${SKILLHUB_LDAP_PASSWORD:}
     user-search-attribute: ${SKILLHUB_LDAP_USER_SEARCH_ATTRIBUTE:uid}
     user-search-base: ${SKILLHUB_LDAP_USER_SEARCH_BASE:}
+    domain: ${SKILLHUB_LDAP_DOMAIN:}
   public:
     base-url: ${SKILLHUB_PUBLIC_BASE_URL:}
   access-policy:
